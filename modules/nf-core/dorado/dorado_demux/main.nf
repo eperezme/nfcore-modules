@@ -15,7 +15,7 @@
 // TODO nf-core: Optional inputs are not currently supported by Nextflow. However, using an empty
 //               list (`[]`) instead of a file can be used to work around this issue.
 
-process DORADO_BASECALLER {
+process DORADO_DEMUX {
     tag "$meta.id"
     label 'process_high'
 
@@ -35,13 +35,12 @@ process DORADO_BASECALLER {
     //               https://github.com/nf-core/modules/blob/master/modules/nf-core/bwa/index/main.nf
     // TODO nf-core: Where applicable please provide/convert compressed files as input/output
     //               e.g. "*.fastq.gz" and NOT "*.fastq", "*.bam" and NOT "*.sam" etc.
-    tuple val(meta), path("*.pod5")
+    tuple val(meta), path("*.bam")
 
     output:
     // TODO nf-core: Named file extensions MUST be emitted for ALL output channels
     tuple val(meta), path("*.bam"), emit: bam
     tuple val(meta), path("*.fastq"), emit: fastq
-    tuple val(meta), path("summary.tsv"), emit: summary
     path "versions.yml"           , emit: versions
 
     when:
@@ -59,48 +58,28 @@ process DORADO_BASECALLER {
     //               using the Nextflow "task" variable e.g. "--threads $task.cpus"
     // TODO nf-core: Please replace the example samtools command below with your module's command
     // TODO nf-core: Please indent the command appropriately (4 spaces!!) to help with readability ;)
-    
-    // Determine the mode based on the duplex parameter
-    def mode = (params.duplex == true) ? "duplex" : "basecaller"
-
-    // MODEL selection and modified bases handling
-    if (params.modified_bases) {
-        def dorado_model = "$params.model,$params.modified_bases"
-    } else {
-        def dorado_model = "$params.model"
-    }
-
-    // EMISION ARGS: Initialize emit_args based on parameters
-    def emit_args = ""
-    if (params.error_correction == true || params.emit_fastq == true) {
-        emit_args = "> basecall.fastq && gzip basecall.fastq"
-    } 
-    // Emit BAM if emit_bam is true or modified_bases is true
-    // Demultiplexing with kit name, output will be in bam
-    elif (params.emit_bam == true || params.modified_bases || (params.demultiplexing && params.kit)) {
-        emit_args = "> basecall.bam"
-    }
 
     // Initialize additional_args based on parameters
     def additional_args = ""
-    if (params.align) {
-       additional_args += " --reference $params.ref_genome --mm2-opt '-k $params.kmer_size -w $params.win_size'" 
+    if (params.sample_sheet) {
+       additional_args += "--sample-sheet $params.sample_sheet" 
     }
-    //TRIMMING 
-    // Handle trimming options
-    if (params.demultiplexing && params.kit) {
-        additional_args += " --no-trim"
-    } 
-    elif (params.trim) {
-        additional_args += " --trim $params.trim"
+    if (params.barcode_arrangement) {
+       additional_args += "--barcode-arrangement $params.barcode_arrangement" 
     }
-    if (params.kit) {
-        additional_args += " --kit-name $params.kit"
+    if (params.barcode_sequences) {
+       additional_args += "--barcode-sequences $params.barcode_sequences" 
     }
 
+    // Can pass a:
+    // --kit-name <kit_name> to demultiplex the reads
+    // --output-dir <output_dir> to specify the output directory
+    // --sample-sheet to restrict barcode classifications and apply aliases
+    // --barcode-arrangement for custom barcode kits
+    // --barcode-sequences to specify the custom barcode sequences
     """
     // Run the dorado basecaller with the specified mode and arguments
-    dorado $mode $dorado_model $additional_args $pod5_path $emit_args 
+    dorado demux $additional_args --output-dir ./demultiplexed/  $input_bam
 
     // Create a versions.yml file with the dorado version information
     cat <<-END_VERSIONS > versions.yml

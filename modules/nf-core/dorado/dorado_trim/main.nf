@@ -15,7 +15,7 @@
 // TODO nf-core: Optional inputs are not currently supported by Nextflow. However, using an empty
 //               list (`[]`) instead of a file can be used to work around this issue.
 
-process DORADO_BASECALLER {
+process DORADO_TRIM {
     tag "$meta.id"
     label 'process_high'
 
@@ -35,12 +35,13 @@ process DORADO_BASECALLER {
     //               https://github.com/nf-core/modules/blob/master/modules/nf-core/bwa/index/main.nf
     // TODO nf-core: Where applicable please provide/convert compressed files as input/output
     //               e.g. "*.fastq.gz" and NOT "*.fastq", "*.bam" and NOT "*.sam" etc.
-    tuple val(meta), path("*.pod5")
+    tuple val(meta), path("*.bam")
+    tuple val(meta), path("*.fastq.gz")
 
     output:
     // TODO nf-core: Named file extensions MUST be emitted for ALL output channels
     tuple val(meta), path("*.bam"), emit: bam
-    tuple val(meta), path("*.fastq"), emit: fastq
+    tuple val(meta), path("*.fastq.gz"), emit: fastq
     tuple val(meta), path("summary.tsv"), emit: summary
     path "versions.yml"           , emit: versions
 
@@ -60,68 +61,14 @@ process DORADO_BASECALLER {
     // TODO nf-core: Please replace the example samtools command below with your module's command
     // TODO nf-core: Please indent the command appropriately (4 spaces!!) to help with readability ;)
     
-    // Determine the mode based on the duplex parameter
-    def mode = (params.duplex == true) ? "duplex" : "basecaller"
-
-    // MODEL selection and modified bases handling
-    if (params.modified_bases) {
-        def dorado_model = "$params.model,$params.modified_bases"
-    } else {
-        def dorado_model = "$params.model"
-    }
-
-    // EMISION ARGS: Initialize emit_args based on parameters
-    def emit_args = ""
-    if (params.error_correction == true || params.emit_fastq == true) {
-        emit_args = "> basecall.fastq && gzip basecall.fastq"
-    } 
-    // Emit BAM if emit_bam is true or modified_bases is true
-    // Demultiplexing with kit name, output will be in bam
-    elif (params.emit_bam == true || params.modified_bases || (params.demultiplexing && params.kit)) {
-        emit_args = "> basecall.bam"
-    }
-
-    // Initialize additional_args based on parameters
-    def additional_args = ""
-    if (params.align) {
-       additional_args += " --reference $params.ref_genome --mm2-opt '-k $params.kmer_size -w $params.win_size'" 
-    }
-    //TRIMMING 
-    // Handle trimming options
-    if (params.demultiplexing && params.kit) {
-        additional_args += " --no-trim"
-    } 
-    elif (params.trim) {
-        additional_args += " --trim $params.trim"
-    }
-    if (params.kit) {
-        additional_args += " --kit-name $params.kit"
-    }
-
     """
     // Run the dorado basecaller with the specified mode and arguments
-    dorado $mode $dorado_model $additional_args $pod5_path $emit_args 
+    dorado trim $reads $trim > ${prefix}_trimmed.bam
 
     // Create a versions.yml file with the dorado version information
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         dorado: \$(echo \$(dorado --version 2>&1) | sed -r 's/.{81}//')
-    END_VERSIONS
-    """
-
-    stub:
-    def args = task.ext.args ?: ''
-    def prefix = task.ext.prefix ?: "${meta.id}"
-    // TODO nf-core: A stub section should mimic the execution of the original module as best as possible
-    //               Have a look at the following examples:
-    //               Simple example: https://github.com/nf-core/modules/blob/818474a292b4860ae8ff88e149fbcda68814114d/modules/nf-core/bcftools/annotate/main.nf#L47-L63
-    //               Complex example: https://github.com/nf-core/modules/blob/818474a292b4860ae8ff88e149fbcda68814114d/modules/nf-core/bedtools/split/main.nf#L38-L54
-    """
-    touch ${prefix}.bam
-
-    cat <<-END_VERSIONS > versions.yml
-    "${task.process}":
-        dorado: \$(samtools --version |& sed '1!d ; s/samtools //')
     END_VERSIONS
     """
 }
