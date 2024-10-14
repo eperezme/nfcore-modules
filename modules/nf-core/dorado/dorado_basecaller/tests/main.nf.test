@@ -1,0 +1,72 @@
+// TODO nf-core: Once you have added the required tests, please run the following command to build this file:
+// nf-core modules test dorado
+nextflow_process {
+
+    name "Test Process DORADO"
+    script "../main.nf"
+    process "DORADO_BASECALLER"
+
+    tag "modules"
+    tag "modules_nfcore"
+    tag "dorado"
+
+    test("ONT [pod5]") {
+
+        when {
+            params {
+                outdir   = "$outputDir"
+            }
+            process {
+                """
+                input[0] = [
+                    [ id: 'test', single_end:true ],
+                    [
+                        file(params.modules_testdata_base_path + 'genomics/sarscov2/illumina/fastq/test_1.fastq.gz', checkIfExists: true)
+                    ]
+                ]
+                """
+            }
+        }
+
+        then {
+            assertAll (
+                { assert process.success },
+                { assert process.out.reads != null },
+                { assert process.out.reads.get(0).get(1) ==~ ".*.trim.fastq.gz" },
+                { assert snapshot(process.out.versions).match("versions_single_end") },
+                { assert snapshot(path(process.out.reads.get(0).get(1)).linesGzip[0]).match() }
+            )
+        }
+    }
+
+    test("sarscov2 Illumina paired-end [fastq]") {
+
+        when {
+            params {
+                outdir   = "$outputDir"
+            }
+            process {
+                """
+                input[0] = [
+                    [ id: 'test', single_end:false ],
+                    [
+                        file(params.modules_testdata_base_path + 'genomics/sarscov2/illumina/fastq/test_1.fastq.gz', checkIfExists: true),
+                        file(params.modules_testdata_base_path + 'genomics/sarscov2/illumina/fastq/test_2.fastq.gz', checkIfExists: true)
+                    ]
+                ]
+                """
+            }
+        }
+
+        then {
+            assertAll (
+                { assert process.success },
+                { assert process.out.reads != null },
+                { assert process.out.reads.get(0).get(1).get(0) ==~ ".*.1.trim.fastq.gz" },
+                { assert process.out.reads.get(0).get(1).get(1) ==~ ".*.2.trim.fastq.gz" },
+                { assert snapshot(path(process.out.reads.get(0).get(1).get(1)).linesGzip[0]).match() },
+                { assert snapshot(process.out.versions).match("versions_paired_end") }
+            )
+        }
+    }
+}
