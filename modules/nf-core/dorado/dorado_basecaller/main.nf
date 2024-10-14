@@ -12,7 +12,7 @@ process DORADO_BASECALLER {
 
     output:
     tuple val(meta), path("*.bam"), emit: bam
-    tuple val(meta), path("*.fastq"), emit: fastq
+    tuple val(meta), path("*.fastq.gz"), emit: fastq
     tuple val(meta), path("summary.tsv"), emit: summary
     path "versions.yml"           , emit: versions
 
@@ -34,15 +34,18 @@ process DORADO_BASECALLER {
     }
 
     // EMISION ARGS: Initialize emit_args based on parameters
+    def outfile = "basecall.bam"
     def emit_args = ""
-    if (params.error_correction == true || params.emit_fastq == true) {
-        emit_args = "basecall.fastq && gzip basecall.fastq"
+    if (params.error_correction == true || params.emit_fastq == true && params.emit_bam == false) {
+        emit_args = "> basecall.fastq && gzip basecall.fastq"
+        def outfile = "basecall.fastq.gz"
     } 
     // Emit BAM if emit_bam is true or modified_bases is true
     // Demultiplexing with kit name, output will be in bam
     elif (params.emit_bam == true || params.modified_bases || (params.demultiplexing && params.kit)) {
-        emit_args = "basecall.bam"
+        emit_args = "> basecall.bam"
     }
+
 
     //ALIGNMENT
     // Initialize additional_args based on parameters
@@ -64,10 +67,10 @@ process DORADO_BASECALLER {
 
     """
     // Run the dorado basecaller with the specified mode and arguments
-    dorado $mode $dorado_model $additional_args $pod5_path > $emit_args
+    dorado $mode $dorado_model $additional_args $pod5_path $emit_args
 
     // Create the summary file
-    dorado summary $emit_args > summary.tsv
+    dorado summary $outfile > summary.tsv
 
     // Create a versions.yml file with the dorado version information
     cat <<-END_VERSIONS > versions.yml
