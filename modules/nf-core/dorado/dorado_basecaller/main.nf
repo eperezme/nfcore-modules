@@ -8,11 +8,11 @@ process DORADO_BASECALLER {
         'docker.io/eperezme/dorado:nano' }"
 
     input:
-    tuple val(meta), path("*.pod5")
+    path (pod5_dir, stageAs: 'pod5_dir/*')
 
     output:
-    tuple val(meta), path("*.bam"), emit: bam
-    tuple val(meta), path("*.fastq.gz"), emit: fastq
+    tuple val(meta), path("*.bam"), emit: bam, optional: true
+    tuple val(meta), path("*.fastq.gz"), emit: fastq, optional: true
     tuple val(meta), path("summary.tsv"), emit: summary
     path "versions.yml"           , emit: versions
 
@@ -39,7 +39,7 @@ process DORADO_BASECALLER {
     if (params.error_correction == true || params.emit_fastq == true && params.emit_bam == false) {
         emit_args = "> basecall.fastq && gzip basecall.fastq"
         def outfile = "basecall.fastq.gz"
-    } 
+    }
     // Emit BAM if emit_bam is true or modified_bases is true
     // Demultiplexing with kit name, output will be in bam
     elif (params.emit_bam == true || params.modified_bases || (params.demultiplexing && params.kit)) {
@@ -51,13 +51,13 @@ process DORADO_BASECALLER {
     // Initialize additional_args based on parameters
     def additional_args = ""
     if (params.align) {
-       additional_args += " --reference $params.ref_genome --mm2-opt '-k $params.kmer_size -w $params.win_size'" 
+       additional_args += " --reference $params.ref_genome --mm2-opt '-k $params.kmer_size -w $params.win_size'"
     }
-    //TRIMMING 
+    //TRIMMING
     // Handle trimming options
     if (params.demultiplexing && params.kit) {
         additional_args += " --no-trim"
-    } 
+    }
     elif (params.trim) {
         additional_args += " --trim $params.trim"
     }
@@ -66,13 +66,13 @@ process DORADO_BASECALLER {
     }
 
     """
-    // Run the dorado basecaller with the specified mode and arguments
-    dorado $mode $dorado_model $additional_args $pod5_path $emit_args
+    # Run the dorado basecaller with the specified mode and arguments
+    dorado $mode $dorado_model $additional_args pod5_dir/ $emit_args
 
-    // Create the summary file
+    # Create the summary file
     dorado summary $outfile > summary.tsv
 
-    // Create a versions.yml file with the dorado version information
+    #Create a versions.yml file with the dorado version information
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         dorado: \$(echo \$(dorado --version 2>&1) | sed -r 's/.{81}//')
